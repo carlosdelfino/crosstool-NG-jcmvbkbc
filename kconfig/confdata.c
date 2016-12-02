@@ -756,7 +756,11 @@ static int conf_split_config(void)
 			d = path;
 			while ((d = strchr(d, '/'))) {
 				*d = 0;
+#if defined(_WIN32) || defined(_WIN64)
+				if (stat(path, &sb) && mkdir(path)) {
+#else
 				if (stat(path, &sb) && mkdir(path, 0755)) {
+#endif
 					res = 1;
 					goto out;
 				}
