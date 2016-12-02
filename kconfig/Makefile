@@ -7,11 +7,11 @@ all: conf mconf nconf
 
 # Build flags
 CFLAGS = -DCONFIG_=\"CT_\" -DPACKAGE="\"crosstool-NG $(VERSION)\""
-LDFLAGS =
+LDFLAGS = $(INTL_LIBS)
 
 # Compiler flags to use gettext
 ifeq ($(gettext),)
-INTL_CFLAGS = -DKBUILD_NO_NLS
+INTL_CFLAGS = -Wno-format-security -DKBUILD_NO_NLS
 endif
 
 # Compiler and linker flags to use ncurses
@@ -22,7 +22,9 @@ NCURSES_LDFLAGS = $(LIBS)
 COMMON_SRC = zconf.tab.c
 COMMON_OBJ = $(patsubst %.c,%.o,$(COMMON_SRC))
 COMMON_DEP = $(patsubst %.o,%.dep,$(COMMON_OBJ))
-$(COMMON_OBJ) $(COMMON_DEP): CFLAGS += $(INTL_CFLAGS) -I.
+$(COMMON_OBJ) $(COMMON_DEP): CFLAGS += -lintl -L/usr/include $(INTL_CFLAGS) -I. 
+$(COMMON_OBJ) $(COMMON_DEP): LDFLAGS += -L/usr/include
+
 
 # lxdialog source files
 LX_SRC = $(sort $(wildcard lxdialog/*.c))
@@ -35,27 +37,21 @@ conf_SRC = conf.c
 conf_OBJ = $(patsubst %.c,%.o,$(conf_SRC))
 conf_DEP = $(patsubst %.o,%.dep,$(conf_OBJ))
 $(conf_OBJ) $(conf_DEP): CFLAGS += $(INTL_CFLAGS)
+conf: LDFLAGS += -lintl
 
 # What's needed to build 'mconf'
 mconf_SRC = mconf.c
 mconf_OBJ = $(patsubst %.c,%.o,$(mconf_SRC))
 mconf_DEP = $(patsubst %.c,%.dep,$(mconf_SRC))
 $(mconf_OBJ) $(mconf_DEP): CFLAGS += $(NCURSES_CFLAGS) $(INTL_CFLAGS)
-mconf: LDFLAGS += $(NCURSES_LDFLAGS)
+mconf: LDFLAGS += -lintl $(NCURSES_LDFLAGS)
 
 # What's needed to build 'nconf'
 nconf_SRC = nconf.c nconf.gui.c
 nconf_OBJ = $(patsubst %.c,%.o,$(nconf_SRC))
 nconf_DEP = $(patsubst %.c,%.dep,$(nconf_SRC))
-$(nconf_OBJ) $(nconf_DEP): CFLAGS += $(INTL_CFLAGS) -I/usr/include/ncurses
-nconf: LDFLAGS += -lmenu -lpanel -lncurses
-
-# Under Cygwin, we need to auto-import some libs (which ones, exactly?)
-# for mconf and nconf to lin properly.
-ifeq ($(shell uname -o 2>/dev/null || echo unknown),Cygwin)
-mconf: LDFLAGS += -Wl,--enable-auto-import
-nconf: LDFLAGS += -Wl,--enable-auto-import
-endif
+$(nconf_OBJ) $(nconf_DEP): CFLAGS += -I/usr/include/ncurses $(INTL_CFLAGS)
+nconf: LDFLAGS += lintl -lmenu -lpanel $(LIBS)
 
 # These are generated files:
 ALL_OBJS = $(sort $(COMMON_OBJ) $(LX_OBJ) $(conf_OBJ) $(mconf_OBJ) $(nconf_OBJ))
@@ -74,8 +70,8 @@ DEPS += $(nconf_DEP)
 	@$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -MM $< |$(sed) -r -e 's|([^:]+.o)( *:+)|$(<:.c=.o) $@\2|;' >$@
 
 # Generate the grammar parser
-zconf.tab.o: zconf.tab.c zconf.hash.c lex.zconf.c
-zconf.tab.dep: zconf.tab.c zconf.hash.c lex.zconf.c
+zconf.tab.o: zconf.tab.c zconf.hash.c zconf.lex.c
+zconf.tab.dep: zconf.tab.c zconf.hash.c zconf.lex.c
 
 .PRECIOUS: zconf.tab.c
 zconf.tab.c: zconf.y
@@ -84,9 +80,9 @@ zconf.tab.c: zconf.y
 
 zconf.hash.c: zconf.gperf
 	@echo "  GPERF  '$@'"
-	@$(gperf) < $< > $@
+	@$(gperf) -C < $< > $@
 
-lex.zconf.c: zconf.l
+zconf.lex.c: zconf.l
 	@echo "  LEX    '$@'"
 	@flex -L -Pzconf -o$@ $<
 
@@ -114,4 +110,4 @@ conf: $(COMMON_OBJ) $(conf_OBJ)
 clean:
 	@echo "  RM     'kconfig'"
 	@rm -f conf mconf nconf $(ALL_OBJS) $(ALL_DEPS)
-	@rm -f rm -f zconf.tab.c zconf.hash.c lex.zconf.c lex.backup
+	@rm -f rm -f zconf.tab.c zconf.hash.c zconf.lex.c lex.backup
